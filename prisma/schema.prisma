@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(EMPLOYEE)
+  tokenVersion  Int            @default(0)
+  properties    Property[]
+  searchFilters SearchFilter[]
+  favorites     Favorite[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([role])
+}
+
+model Property {
+  id           String                  @id @default(uuid()) @db.Uuid
+  title        String
+  description  String
+  price        Decimal                 @db.Decimal(12, 2)
+  location     String
+  rooms        Int
+  ownerId      String                  @db.Uuid
+  owner        User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  favorites    Favorite[]
+  searchVector Unsupported("tsvector")? @default(dbgenerated()) @map("search_vector")
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([ownerId])
+  @@index([location])
+  @@index([rooms])
+  @@index([price])
+  @@index([location, rooms, price])
+}
+
+model SearchFilter {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query     String?
+  minPrice  Decimal? @db.Decimal(12, 2)
+  maxPrice  Decimal? @db.Decimal(12, 2)
+  location  String?
+  rooms     Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+model Favorite {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  propertyId String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, propertyId])
+  @@index([userId])
+  @@index([propertyId])
+}
+
+// Full-Text Search (PostgreSQL):
+// El campo "search_vector" y su indice GIN se gestionan via SQL migration
+// para soportar columna GENERATED con normalizacion lower(unaccent(...)).
