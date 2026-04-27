@@ -1,5 +1,3 @@
-import { Role as RoleEnum } from "@/generated/prisma/enums";
-import type { Role } from "@/generated/prisma/enums";
 import { verifyAccessToken } from "@/lib/jwt";
 import { searchFilterService } from "@/services/search-filter.service";
 import { NextRequest, NextResponse } from "next/server";
@@ -8,15 +6,9 @@ import { z, ZodError } from "zod";
 export const runtime = "nodejs";
 
 const ACCESS_COOKIE_NAME = "access_token";
-const roleValues = new Set<Role>(Object.values(RoleEnum));
-
-const isRole = (value: unknown): value is Role => {
-  return typeof value === "string" && roleValues.has(value as Role);
-};
 
 interface AuthenticatedRequestUser {
   userId: string;
-  role: Role;
 }
 
 const resolveAuthenticatedUser = async (
@@ -29,24 +21,13 @@ const resolveAuthenticatedUser = async (
       const payload = await verifyAccessToken(accessToken);
       return {
         userId: payload.sub,
-        role: payload.role,
       };
     } catch {
       return null;
     }
   }
 
-  const userIdHeader = request.headers.get("x-user-id");
-  const roleHeader = request.headers.get("x-user-role");
-
-  if (!userIdHeader || !isRole(roleHeader)) {
-    return null;
-  }
-
-  return {
-    userId: userIdHeader,
-    role: roleHeader,
-  };
+  return null;
 };
 
 const asOptionalString = (value: unknown): unknown => {

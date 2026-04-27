@@ -155,6 +155,12 @@ const buildSearchParams = (filters: FilterState, page: number): URLSearchParams 
   return params;
 };
 
+const buildPdfDownloadHref = (filters: FilterState): string => {
+  const params = buildSearchParams(filters, 1);
+  params.set("pageSize", "50");
+  return `/api/properties/search/pdf?${params.toString()}`;
+};
+
 const parseStateFromUrl = (search: string): {
   filters: FilterState;
   page: number;
@@ -456,6 +462,8 @@ export default function SearchPage() {
     }
   };
 
+  const pdfDownloadHref = buildPdfDownloadHref(filters);
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -648,6 +656,12 @@ export default function SearchPage() {
             </p>
 
             <div className="flex items-center gap-3">
+              <a
+                href={pdfDownloadHref}
+                className="inline-flex h-9 items-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-medium text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
+              >
+                Descargar PDF
+              </a>
               <label htmlFor="sort" className="text-sm font-medium text-slate-700">
                 Ordenar
               </label>
