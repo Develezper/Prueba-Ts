@@ -106,10 +106,25 @@ export default async function PropertyDetailPage({
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <section className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-            <div className="h-72 rounded-3xl bg-gradient-to-br from-emerald-200 via-teal-100 to-slate-100 sm:h-96" />
+            <div
+              className="h-72 rounded-3xl bg-linear-to-br from-emerald-200 via-teal-100 to-slate-100 bg-cover bg-center sm:h-96"
+              style={{
+                backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.24), rgba(15, 23, 42, 0.08)), url(${property.imageUrl})`,
+              }}
+            />
             <div className="grid gap-3 sm:grid-rows-2">
-              <div className="h-36 rounded-2xl bg-gradient-to-br from-slate-200 via-slate-100 to-white sm:h-auto" />
-              <div className="h-36 rounded-2xl bg-gradient-to-br from-amber-100 via-orange-50 to-white sm:h-auto" />
+              <div
+                className="h-36 rounded-2xl bg-linear-to-br from-slate-200 via-slate-100 to-white bg-cover bg-center sm:h-auto"
+                style={{
+                  backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.22), rgba(15, 23, 42, 0.04)), url(${property.imageUrl})`,
+                }}
+              />
+              <div
+                className="h-36 rounded-2xl bg-linear-to-br from-amber-100 via-orange-50 to-white bg-cover bg-center sm:h-auto"
+                style={{
+                  backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.22), rgba(15, 23, 42, 0.04)), url(${property.imageUrl})`,
+                }}
+              />
             </div>
           </div>
 

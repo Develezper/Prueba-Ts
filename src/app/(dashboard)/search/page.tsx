@@ -21,6 +21,7 @@ interface PropertyItem {
   id: string;
   title: string;
   description: string;
+  imageUrl: string;
   price: number | string;
   location: string;
   rooms: number;
@@ -53,6 +54,7 @@ const propertyItemSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
+  imageUrl: z.string().url(),
   price: z.union([z.number(), z.string()]),
   location: z.string(),
   rooms: z.number().int(),
@@ -727,7 +729,12 @@ export default function SearchPage() {
                     className="absolute right-3 top-3 z-10"
                   />
                   <Link href={`/search/${property.id}`} className="block">
-                    <div className="relative h-36 bg-linear-to-br from-emerald-200 via-teal-100 to-slate-100">
+                    <div
+                      className="relative h-36 bg-linear-to-br from-emerald-200 via-teal-100 to-slate-100 bg-cover bg-center"
+                      style={{
+                        backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.2), rgba(15, 23, 42, 0.05)), url(${property.imageUrl})`,
+                      }}
+                    >
                       <span className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700">
                         Propiedad
                       </span>

@@ -96,6 +96,7 @@ export const searchProperties = async (
         "id",
         "title",
         "description",
+        "imageUrl",
         "price",
         "location",
         "rooms",
