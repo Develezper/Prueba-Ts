@@ -1,13 +1,8 @@
-import {
-  jwtConfig,
-  verifyAccessToken,
-} from "@/lib/jwt";
-import { authService } from "@/services/auth.service";
+import { verifyAccessToken } from "@/lib/jwt";
 import { errors as joseErrors } from "jose";
 import { NextRequest, NextResponse } from "next/server";
 
 const ACCESS_COOKIE_NAME = "access_token";
-const REFRESH_COOKIE_NAME = "refresh_token";
 
 const protectedRoutePrefixes = ["/search", "/dashboard", "/favorites"];
 
@@ -39,30 +34,6 @@ const withAuthenticatedHeaders = (
   });
 };
 
-const setAccessCookie = (response: NextResponse, accessToken: string): void => {
-  response.cookies.set({
-    name: ACCESS_COOKIE_NAME,
-    value: accessToken,
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/",
-    maxAge: jwtConfig.accessTokenMaxAgeSeconds,
-  });
-};
-
-const setRefreshCookie = (response: NextResponse, refreshToken: string): void => {
-  response.cookies.set({
-    name: REFRESH_COOKIE_NAME,
-    value: refreshToken,
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/",
-    maxAge: jwtConfig.refreshTokenMaxAgeSeconds,
-  });
-};
-
 const isJwtExpiredError = (error: unknown): boolean => {
   return (
     error instanceof joseErrors.JWTExpired ||
@@ -73,7 +44,7 @@ const isJwtExpiredError = (error: unknown): boolean => {
   );
 };
 
-export async function proxy(request: NextRequest): Promise<NextResponse> {
+export async function middleware(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
 
   if (!isProtectedRoute(pathname)) {
@@ -81,34 +52,19 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   const accessToken = request.cookies.get(ACCESS_COOKIE_NAME)?.value;
-  const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
 
-  if (accessToken) {
-    try {
-      const payload = await verifyAccessToken(accessToken);
-      return withAuthenticatedHeaders(request, payload.sub, payload.role);
-    } catch (error: unknown) {
-      if (!isJwtExpiredError(error)) {
-        return redirectToLogin(request);
-      }
-    }
-  }
-
-  if (!refreshToken) {
+  if (!accessToken) {
     return redirectToLogin(request);
   }
 
   try {
-    const refreshed = await authService.refresh(refreshToken);
-    const response = withAuthenticatedHeaders(
-      request,
-      refreshed.user.id,
-      refreshed.user.role,
-    );
-    setAccessCookie(response, refreshed.tokens.accessToken);
-    setRefreshCookie(response, refreshed.tokens.refreshToken);
-    return response;
-  } catch {
+    const payload = await verifyAccessToken(accessToken);
+    return withAuthenticatedHeaders(request, payload.sub, payload.role);
+  } catch (error: unknown) {
+    if (isJwtExpiredError(error)) {
+      return redirectToLogin(request);
+    }
+
     return redirectToLogin(request);
   }
 }

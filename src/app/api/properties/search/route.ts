@@ -64,6 +64,7 @@ const searchQuerySchema = z
       toOptionalNumber,
       z.number().int().min(1).max(50).default(12),
     ),
+    sort: z.enum(["relevance", "newest", "priceAsc", "priceDesc"]).default("relevance"),
   })
   .superRefine((data, context) => {
     if (
@@ -136,6 +137,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       rooms: params.get("rooms") ?? undefined,
       page: params.get("page") ?? undefined,
       pageSize: params.get("pageSize") ?? undefined,
+      sort: asOptionalString(params.get("sort")),
     });
 
     const results = await searchService.searchProperties(filters);

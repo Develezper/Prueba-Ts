@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { FavoriteButton } from "@/components/ui/favorite-button";
 
+type SearchSort = "relevance" | "newest" | "priceAsc" | "priceDesc";
+
 interface FilterState {
   query: string;
   location: string;
   minPrice: string;
   maxPrice: string;
   rooms: string;
+  sort: SearchSort;
 }
 
 interface PropertyItem {
@@ -35,6 +38,7 @@ interface FavoriteListItem {
 }
 
 interface SavedSearchFilterItem {
+  id: string;
   query: string | null;
   location: string | null;
   minPrice: string | null;
@@ -43,6 +47,7 @@ interface SavedSearchFilterItem {
 }
 
 const PAGE_SIZE = 12;
+const sortValues: SearchSort[] = ["relevance", "newest", "priceAsc", "priceDesc"];
 
 const propertyItemSchema = z.object({
   id: z.string(),
@@ -72,15 +77,16 @@ const favoritesResponseSchema = z.object({
 });
 
 const savedSearchFilterResponseSchema = z.object({
-  data: z
-    .object({
+  data: z.array(
+    z.object({
+      id: z.string(),
       query: z.string().nullable(),
       location: z.string().nullable(),
       minPrice: z.string().nullable(),
       maxPrice: z.string().nullable(),
       rooms: z.number().int().nullable(),
-    })
-    .nullable(),
+    }),
+  ),
 });
 
 const currencyFormat = new Intl.NumberFormat("es-CO", {
@@ -95,9 +101,27 @@ const defaultFilters: FilterState = {
   minPrice: "",
   maxPrice: "",
   rooms: "",
+  sort: "relevance",
 };
 
-const buildSearchParams = (filters: FilterState): URLSearchParams => {
+const isSearchSort = (value: string | null): value is SearchSort => {
+  return value !== null && sortValues.includes(value as SearchSort);
+};
+
+const parsePositiveInt = (value: string | null): number => {
+  if (!value) {
+    return 1;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return 1;
+  }
+
+  return parsed;
+};
+
+const buildSearchParams = (filters: FilterState, page: number): URLSearchParams => {
   const params = new URLSearchParams();
 
   const query = filters.query.trim();
@@ -122,10 +146,50 @@ const buildSearchParams = (filters: FilterState): URLSearchParams => {
     params.set("rooms", rooms);
   }
 
-  params.set("page", "1");
+  params.set("sort", filters.sort);
+  params.set("page", String(page));
   params.set("pageSize", String(PAGE_SIZE));
 
   return params;
+};
+
+const parseStateFromUrl = (search: string): {
+  filters: FilterState;
+  page: number;
+  hasUserParams: boolean;
+} => {
+  const params = new URLSearchParams(search);
+
+  const query = params.get("query")?.trim() ?? "";
+  const location = params.get("location")?.trim() ?? "";
+  const minPrice = params.get("minPrice")?.trim() ?? "";
+  const maxPrice = params.get("maxPrice")?.trim() ?? "";
+  const rooms = params.get("rooms")?.trim() ?? "";
+  const sortParam = params.get("sort");
+  const sort: SearchSort = isSearchSort(sortParam) ? sortParam : "relevance";
+  const page = parsePositiveInt(params.get("page"));
+
+  const hasUserParams =
+    query.length > 0 ||
+    location.length > 0 ||
+    minPrice.length > 0 ||
+    maxPrice.length > 0 ||
+    rooms.length > 0 ||
+    isSearchSort(sortParam) ||
+    page > 1;
+
+  return {
+    filters: {
+      query,
+      location,
+      minPrice,
+      maxPrice,
+      rooms,
+      sort,
+    },
+    page,
+    hasUserParams,
+  };
 };
 
 const toNumericPrice = (value: string | number): number => {
@@ -139,6 +203,7 @@ const toFilterState = (saved: SavedSearchFilterItem): FilterState => {
     minPrice: saved.minPrice ?? "",
     maxPrice: saved.maxPrice ?? "",
     rooms: saved.rooms === null ? "" : String(saved.rooms),
+    sort: "relevance",
   };
 };
 
@@ -163,7 +228,19 @@ const toSaveSearchFilterPayload = (filters: FilterState) => {
 
 export default function SearchPage() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>(defaultFilters);
+  const [initialUrlState] = useState(() => {
+    if (typeof window === "undefined") {
+      return {
+        filters: defaultFilters,
+        page: 1,
+        hasUserParams: false,
+      };
+    }
+
+    return parseStateFromUrl(window.location.search);
+  });
+  const [filters, setFilters] = useState<FilterState>(initialUrlState.filters);
+  const [currentPage, setCurrentPage] = useState<number>(initialUrlState.page);
   const [properties, setProperties] = useState<PropertyItem[]>([]);
   const [meta, setMeta] = useState<SearchMeta | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -171,12 +248,19 @@ export default function SearchPage() {
   const [saveSearchFilterMessage, setSaveSearchFilterMessage] = useState<string>("");
   const [isSavingSearchFilter, setIsSavingSearchFilter] = useState<boolean>(false);
   const [favoritePropertyIds, setFavoritePropertyIds] = useState<string[]>([]);
-  const [isSearchFilterReady, setIsSearchFilterReady] = useState<boolean>(false);
+  const [isSearchFilterReady, setIsSearchFilterReady] = useState<boolean>(
+    initialUrlState.hasUserParams,
+  );
+  const hasLoadedSavedFiltersRef = useRef<boolean>(false);
   const lastQueryRef = useRef<string>("");
 
   const fetchProperties = useCallback(
-    async (nextFilters: FilterState, force = false): Promise<void> => {
-      const params = buildSearchParams(nextFilters);
+    async (
+      nextFilters: FilterState,
+      nextPage: number,
+      force = false,
+    ): Promise<void> => {
+      const params = buildSearchParams(nextFilters, nextPage);
       const queryString = params.toString();
 
       if (!force && queryString === lastQueryRef.current) {
@@ -188,7 +272,7 @@ export default function SearchPage() {
       setErrorMessage("");
 
       try {
-        router.replace(queryString.length > 0 ? `/search?${queryString}` : "/search", {
+        router.replace(`/search?${queryString}`, {
           scroll: false,
         });
 
@@ -219,6 +303,10 @@ export default function SearchPage() {
         const parsed = searchResponseSchema.parse(responseData);
         setProperties(parsed.data);
         setMeta(parsed.meta);
+
+        if (parsed.meta.page !== nextPage) {
+          setCurrentPage(parsed.meta.page);
+        }
       } catch {
         setErrorMessage("Error de red o respuesta invalida del servidor.");
         setProperties([]);
@@ -267,8 +355,9 @@ export default function SearchPage() {
       const payload: unknown = await response.json();
       const parsed = savedSearchFilterResponseSchema.parse(payload);
 
-      if (parsed.data) {
-        setFilters(toFilterState(parsed.data));
+      if (parsed.data.length > 0) {
+        setFilters(toFilterState(parsed.data[0]));
+        setCurrentPage(1);
       }
     } catch {
       // Keep default filters when loading persisted filters fails.
@@ -277,15 +366,20 @@ export default function SearchPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      void loadLatestSearchFilter();
-    }, 0);
+  const updateFilters = (updater: (previous: FilterState) => FilterState): void => {
+    setFilters(updater);
+    setCurrentPage(1);
+  };
 
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [loadLatestSearchFilter]);
+  useEffect(() => {
+    if (initialUrlState.hasUserParams || hasLoadedSavedFiltersRef.current) {
+      return;
+    }
+
+    hasLoadedSavedFiltersRef.current = true;
+
+    void loadLatestSearchFilter();
+  }, [initialUrlState.hasUserParams, loadLatestSearchFilter]);
 
   useEffect(() => {
     if (!isSearchFilterReady) {
@@ -293,13 +387,13 @@ export default function SearchPage() {
     }
 
     const timeout = setTimeout(() => {
-      void fetchProperties(filters);
+      void fetchProperties(filters, currentPage);
     }, 350);
 
     return () => {
       clearTimeout(timeout);
     };
-  }, [filters, fetchProperties, isSearchFilterReady]);
+  }, [currentPage, fetchProperties, filters, isSearchFilterReady]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -313,7 +407,7 @@ export default function SearchPage() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void fetchProperties(filters, true);
+    void fetchProperties(filters, currentPage, true);
   };
 
   const handleFavoriteToggle = (propertyId: string, isFavorite: boolean): void => {
@@ -352,9 +446,9 @@ export default function SearchPage() {
         return;
       }
 
-      setSaveSearchFilterMessage("Búsqueda guardada.");
+      setSaveSearchFilterMessage("Busqueda guardada.");
     } catch {
-      setSaveSearchFilterMessage("Error de red al guardar la búsqueda.");
+      setSaveSearchFilterMessage("Error de red al guardar la busqueda.");
     } finally {
       setIsSavingSearchFilter(false);
     }
@@ -387,7 +481,7 @@ export default function SearchPage() {
               type="text"
               value={filters.query}
               onChange={(event) =>
-                setFilters((previous) => ({
+                updateFilters((previous) => ({
                   ...previous,
                   query: event.target.value,
                 }))
@@ -421,7 +515,7 @@ export default function SearchPage() {
                 name="location"
                 value={filters.location}
                 onChange={(event) =>
-                  setFilters((previous) => ({
+                  updateFilters((previous) => ({
                     ...previous,
                     location: event.target.value,
                   }))
@@ -452,7 +546,7 @@ export default function SearchPage() {
                   type="number"
                   value={filters.minPrice}
                   onChange={(event) =>
-                    setFilters((previous) => ({
+                    updateFilters((previous) => ({
                       ...previous,
                       minPrice: event.target.value,
                     }))
@@ -474,7 +568,7 @@ export default function SearchPage() {
                   type="number"
                   value={filters.maxPrice}
                   onChange={(event) =>
-                    setFilters((previous) => ({
+                    updateFilters((previous) => ({
                       ...previous,
                       maxPrice: event.target.value,
                     }))
@@ -497,7 +591,7 @@ export default function SearchPage() {
                 name="rooms"
                 value={filters.rooms}
                 onChange={(event) =>
-                  setFilters((previous) => ({
+                  updateFilters((previous) => ({
                     ...previous,
                     rooms: event.target.value,
                   }))
@@ -514,7 +608,10 @@ export default function SearchPage() {
 
             <button
               type="button"
-              onClick={() => setFilters(defaultFilters)}
+              onClick={() => {
+                setFilters(defaultFilters);
+                setCurrentPage(1);
+              }}
               className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
             >
               Limpiar filtros
@@ -528,7 +625,7 @@ export default function SearchPage() {
               disabled={isSavingSearchFilter}
               className="h-11 w-full rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
             >
-              {isSavingSearchFilter ? "Guardando..." : "Guardar búsqueda"}
+              {isSavingSearchFilter ? "Guardando..." : "Guardar busqueda"}
             </button>
 
             {saveSearchFilterMessage ? (
@@ -540,18 +637,42 @@ export default function SearchPage() {
         </aside>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-600">
               <span className="font-semibold text-slate-900">
                 {meta?.total ?? properties.length}
               </span>{" "}
               propiedades disponibles
             </p>
-            {isLoading ? (
-              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                Cargando...
-              </span>
-            ) : null}
+
+            <div className="flex items-center gap-3">
+              <label htmlFor="sort" className="text-sm font-medium text-slate-700">
+                Ordenar
+              </label>
+              <select
+                id="sort"
+                name="sort"
+                value={filters.sort}
+                onChange={(event) =>
+                  updateFilters((previous) => ({
+                    ...previous,
+                    sort: event.target.value as SearchSort,
+                  }))
+                }
+                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              >
+                <option value="relevance">Relevancia</option>
+                <option value="newest">Mas recientes</option>
+                <option value="priceAsc">Precio: menor a mayor</option>
+                <option value="priceDesc">Precio: mayor a menor</option>
+              </select>
+
+              {isLoading ? (
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                  Cargando...
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {errorMessage ? (
@@ -606,7 +727,7 @@ export default function SearchPage() {
                     className="absolute right-3 top-3 z-10"
                   />
                   <Link href={`/search/${property.id}`} className="block">
-                    <div className="relative h-36 bg-gradient-to-br from-emerald-200 via-teal-100 to-slate-100">
+                    <div className="relative h-36 bg-linear-to-br from-emerald-200 via-teal-100 to-slate-100">
                       <span className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700">
                         Propiedad
                       </span>
@@ -650,6 +771,38 @@ export default function SearchPage() {
                   </div>
                 </article>
               ))}
+            </div>
+          ) : null}
+
+          {meta && meta.totalPages > 1 ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-600">
+                Pagina {meta.page} de {meta.totalPages}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentPage((previous) => Math.max(1, previous - 1));
+                  }}
+                  disabled={isLoading || currentPage <= 1}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentPage((previous) =>
+                      Math.min(meta.totalPages, previous + 1),
+                    );
+                  }}
+                  disabled={isLoading || currentPage >= meta.totalPages}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
           ) : null}
         </div>

@@ -19,6 +19,12 @@ interface AuthenticatedRequestUser {
   role: Role;
 }
 
+interface RouteContext {
+  params: Promise<{
+    id: string;
+  }>;
+}
+
 const resolveAuthenticatedUser = async (
   request: NextRequest,
 ): Promise<AuthenticatedRequestUser | null> => {
@@ -82,7 +88,9 @@ const toOptionalNumber = (value: unknown): unknown => {
   return value;
 };
 
-const saveSearchFilterSchema = z
+const searchFilterIdSchema = z.string().uuid();
+
+const updateSearchFilterSchema = z
   .object({
     query: z.preprocess(asOptionalString, z.string().min(1).max(120).optional()),
     location: z.preprocess(
@@ -117,7 +125,15 @@ const saveSearchFilterSchema = z
     }
   });
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+const resolveId = async (context: RouteContext): Promise<string> => {
+  const { id } = await context.params;
+  return searchFilterIdSchema.parse(id);
+};
+
+export async function GET(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
   try {
     const authenticatedUser = await resolveAuthenticatedUser(request);
 
@@ -130,15 +146,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const filters = await searchFilterService.listForUser(authenticatedUser.userId);
+    const id = await resolveId(context);
+    const filter = await searchFilterService.getByIdForUser(
+      authenticatedUser.userId,
+      id,
+    );
+
+    if (!filter) {
+      return NextResponse.json(
+        {
+          error: "Search filter not found.",
+        },
+        { status: 404 },
+      );
+    }
 
     return NextResponse.json(
       {
-        data: filters,
+        data: filter,
       },
       { status: 200 },
     );
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        {
+          error: "Invalid search filter id.",
+          issues: error.issues,
+        },
+        { status: 400 },
+      );
+    }
+
     return NextResponse.json(
       {
         error: "Internal server error.",
@@ -148,7 +187,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function PATCH(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
   try {
     const authenticatedUser = await resolveAuthenticatedUser(request);
 
@@ -161,16 +203,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const id = await resolveId(context);
     const body: unknown = await request.json();
-    const payload = saveSearchFilterSchema.parse(body);
-    const saved = await searchFilterService.createForUser(
+    const payload = updateSearchFilterSchema.parse(body);
+    const updated = await searchFilterService.updateByIdForUser(
       authenticatedUser.userId,
+      id,
       payload,
     );
 
+    if (!updated) {
+      return NextResponse.json(
+        {
+          error: "Search filter not found.",
+        },
+        { status: 404 },
+      );
+    }
+
     return NextResponse.json(
       {
-        data: saved,
+        data: updated,
       },
       { status: 200 },
     );
@@ -188,6 +241,65 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error: "Validation error.",
+          issues: error.issues,
+        },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        error: "Internal server error.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
+  return PATCH(request, context);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
+  try {
+    const authenticatedUser = await resolveAuthenticatedUser(request);
+
+    if (!authenticatedUser) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized.",
+        },
+        { status: 401 },
+      );
+    }
+
+    const id = await resolveId(context);
+    const deleted = await searchFilterService.deleteByIdForUser(
+      authenticatedUser.userId,
+      id,
+    );
+
+    if (!deleted) {
+      return NextResponse.json(
+        {
+          error: "Search filter not found.",
+        },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json(null, { status: 204 });
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        {
+          error: "Invalid search filter id.",
           issues: error.issues,
         },
         { status: 400 },

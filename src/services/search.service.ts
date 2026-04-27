@@ -8,6 +8,7 @@ export interface PropertySearchFilters {
   minPrice?: number;
   maxPrice?: number;
   rooms?: number;
+  sort?: "relevance" | "newest" | "priceAsc" | "priceDesc";
   page: number;
   pageSize: number;
 }
@@ -29,6 +30,7 @@ export const searchProperties = async (
   const location = filters.location?.trim() ?? "";
   const hasQuery = query.length > 0;
   const hasLocation = location.length > 0;
+  const sort = filters.sort ?? "relevance";
   const skip = (filters.page - 1) * filters.pageSize;
   const conditions: Prisma.Sql[] = [];
 
@@ -61,17 +63,32 @@ export const searchProperties = async (
       ? Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`
       : Prisma.empty;
 
-  const orderByClause =
-    hasQuery
-      ? Prisma.sql`
-          ORDER BY
-            ts_rank_cd(
-              "search_vector",
-              plainto_tsquery('spanish', lower(unaccent(${query})))
-            ) DESC,
-            "createdAt" DESC
-        `
-      : Prisma.sql`ORDER BY "createdAt" DESC`;
+  const orderByClause = (() => {
+    if (sort === "priceAsc") {
+      return Prisma.sql`ORDER BY "price" ASC, "createdAt" DESC`;
+    }
+
+    if (sort === "priceDesc") {
+      return Prisma.sql`ORDER BY "price" DESC, "createdAt" DESC`;
+    }
+
+    if (sort === "newest") {
+      return Prisma.sql`ORDER BY "createdAt" DESC`;
+    }
+
+    if (hasQuery) {
+      return Prisma.sql`
+        ORDER BY
+          ts_rank_cd(
+            "search_vector",
+            plainto_tsquery('spanish', lower(unaccent(${query})))
+          ) DESC,
+          "createdAt" DESC
+      `;
+    }
+
+    return Prisma.sql`ORDER BY "createdAt" DESC`;
+  })();
 
   const [properties, countResult] = await Promise.all([
     prisma.$queryRaw<Property[]>`
