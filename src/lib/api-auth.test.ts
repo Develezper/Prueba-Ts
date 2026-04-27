@@ -1,15 +1,19 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  AUTH_USER_ID_HEADER,
+  AUTH_USER_ROLE_HEADER,
   AuthorizationError,
   authorizationErrorResponse,
   ensureAuthenticatedUser,
   requireRole,
+  resolveAuthenticatedUserFromHeaders,
+  type AuthenticatedRequestUser,
 } from "@/lib/api-auth";
 
 describe("api-auth authorization guards", () => {
   it("allows access when role is sufficient", () => {
-    const user = {
+    const user: AuthenticatedRequestUser = {
       userId: "u-admin",
       role: "ADMIN",
     };
@@ -26,15 +30,20 @@ describe("api-auth authorization guards", () => {
 
     try {
       run();
-    } catch (error) {
+    } catch (error: unknown) {
       expect(error).toBeInstanceOf(AuthorizationError);
+
+      if (!(error instanceof AuthorizationError)) {
+        throw error;
+      }
+
       expect(error.statusCode).toBe(401);
       expect(error.message).toBe("No autorizado.");
     }
   });
 
   it("returns 403 when role is insufficient", () => {
-    const user = {
+    const user: AuthenticatedRequestUser = {
       userId: "u-1",
       role: "EMPLOYEE",
     };
@@ -45,8 +54,13 @@ describe("api-auth authorization guards", () => {
 
     try {
       run();
-    } catch (error) {
+    } catch (error: unknown) {
       expect(error).toBeInstanceOf(AuthorizationError);
+
+      if (!(error instanceof AuthorizationError)) {
+        throw error;
+      }
+
       expect(error.statusCode).toBe(403);
       expect(error.message).toBe("Solo admins.");
     }
@@ -62,6 +76,20 @@ describe("api-auth authorization guards", () => {
     const body = await response.json();
     expect(body).toEqual({
       error: "No permitido.",
+    });
+  });
+
+  it("resolves authenticated user from forwarded proxy headers", () => {
+    const authenticatedUser = resolveAuthenticatedUserFromHeaders(
+      new Headers({
+        [AUTH_USER_ID_HEADER]: "u-proxy",
+        [AUTH_USER_ROLE_HEADER]: "ADMIN",
+      }),
+    );
+
+    expect(authenticatedUser).toEqual({
+      userId: "u-proxy",
+      role: "ADMIN",
     });
   });
 });

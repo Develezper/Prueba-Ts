@@ -41,24 +41,47 @@ export interface TokenClaimsInput {
   tokenVersion: number;
 }
 
-export interface VerifiedTokenPayload {
+interface BaseVerifiedTokenPayload {
   sub: string;
   role: Role;
-  tokenVersion: number;
   type: TokenType;
   iat?: number;
   exp?: number;
 }
 
+export interface VerifiedAccessTokenPayload extends BaseVerifiedTokenPayload {
+  type: "access";
+}
+
+export interface VerifiedRefreshTokenPayload extends BaseVerifiedTokenPayload {
+  type: "refresh";
+  tokenVersion: number;
+}
+
+interface AccessTokenClaimsInput {
+  userId: string;
+  role: Role;
+}
+
 const signToken = async (
-  payload: TokenClaimsInput,
+  payload: AccessTokenClaimsInput,
   tokenType: TokenType,
   expiresIn: string,
 ): Promise<string> => {
+  const claims =
+    tokenType === "refresh"
+      ? {
+          role: payload.role,
+          tokenVersion: (payload as TokenClaimsInput).tokenVersion,
+          type: tokenType,
+        }
+      : {
+          role: payload.role,
+          type: tokenType,
+        };
+
   return new SignJWT({
-    role: payload.role,
-    tokenVersion: payload.tokenVersion,
-    type: tokenType,
+    ...claims,
   })
     .setProtectedHeader({ alg: JWT_ALGORITHM, typ: "JWT" })
     .setSubject(payload.userId)
@@ -70,7 +93,7 @@ const signToken = async (
 const verifyToken = async (
   token: string,
   expectedType: TokenType,
-): Promise<VerifiedTokenPayload> => {
+): Promise<VerifiedAccessTokenPayload | VerifiedRefreshTokenPayload> => {
   const { payload } = await jwtVerify(token, getJwtSecret(), {
     algorithms: [JWT_ALGORITHM],
   });
@@ -83,13 +106,6 @@ const verifyToken = async (
     throw new Error("Invalid token role.");
   }
 
-  if (
-    typeof payload.tokenVersion !== "number" ||
-    !Number.isInteger(payload.tokenVersion)
-  ) {
-    throw new Error("Invalid token version.");
-  }
-
   if (!isTokenType(payload.type)) {
     throw new Error("Invalid token type.");
   }
@@ -98,10 +114,27 @@ const verifyToken = async (
     throw new Error("Unexpected token type.");
   }
 
+  if (payload.type === "refresh") {
+    if (
+      typeof payload.tokenVersion !== "number" ||
+      !Number.isInteger(payload.tokenVersion)
+    ) {
+      throw new Error("Invalid token version.");
+    }
+
+    return {
+      sub: payload.sub,
+      role: payload.role,
+      tokenVersion: payload.tokenVersion,
+      type: payload.type,
+      iat: payload.iat,
+      exp: payload.exp,
+    };
+  }
+
   return {
     sub: payload.sub,
     role: payload.role,
-    tokenVersion: payload.tokenVersion,
     type: payload.type,
     iat: payload.iat,
     exp: payload.exp,
@@ -109,7 +142,7 @@ const verifyToken = async (
 };
 
 export const signAccessToken = async (
-  payload: TokenClaimsInput,
+  payload: AccessTokenClaimsInput,
 ): Promise<string> => {
   return signToken(payload, "access", ACCESS_TOKEN_EXPIRES_IN);
 };
@@ -122,14 +155,14 @@ export const signRefreshToken = async (
 
 export const verifyAccessToken = async (
   token: string,
-): Promise<VerifiedTokenPayload> => {
-  return verifyToken(token, "access");
+): Promise<VerifiedAccessTokenPayload> => {
+  return verifyToken(token, "access") as Promise<VerifiedAccessTokenPayload>;
 };
 
 export const verifyRefreshToken = async (
   token: string,
-): Promise<VerifiedTokenPayload> => {
-  return verifyToken(token, "refresh");
+): Promise<VerifiedRefreshTokenPayload> => {
+  return verifyToken(token, "refresh") as Promise<VerifiedRefreshTokenPayload>;
 };
 
 export const jwtConfig = {

@@ -3,6 +3,12 @@ import type { Role } from "@/generated/prisma/enums";
 import { NextRequest, NextResponse } from "next/server";
 
 const ACCESS_COOKIE_NAME = "access_token";
+export const AUTH_USER_ID_HEADER = "x-user-id";
+export const AUTH_USER_ROLE_HEADER = "x-user-role";
+
+interface HeaderReader {
+  get(name: string): string | null | undefined;
+}
 
 export interface AuthenticatedRequestUser {
   userId: string;
@@ -19,9 +25,35 @@ export class AuthorizationError extends Error {
   }
 }
 
+const isRole = (value: string | null | undefined): value is Role => {
+  return value === "ADMIN" || value === "EMPLOYEE";
+};
+
+export const resolveAuthenticatedUserFromHeaders = (
+  requestHeaders: HeaderReader,
+): AuthenticatedRequestUser | null => {
+  const userId = requestHeaders.get(AUTH_USER_ID_HEADER);
+  const roleValue = requestHeaders.get(AUTH_USER_ROLE_HEADER);
+
+  if (!userId || !isRole(roleValue)) {
+    return null;
+  }
+
+  return {
+    userId,
+    role: roleValue,
+  };
+};
+
 export const resolveAuthenticatedUser = async (
   request: NextRequest,
 ): Promise<AuthenticatedRequestUser | null> => {
+  const forwardedUser = resolveAuthenticatedUserFromHeaders(request.headers);
+
+  if (forwardedUser) {
+    return forwardedUser;
+  }
+
   const accessToken = request.cookies.get(ACCESS_COOKIE_NAME)?.value;
 
   if (!accessToken) {

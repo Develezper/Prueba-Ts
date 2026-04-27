@@ -1,108 +1,131 @@
-"use client";
-
-import { SearchFiltersPanel, SearchHero, SearchResultsToolbar } from "./search-page.controls";
 import {
   PropertyGrid,
   SearchEmptyState,
-  SearchLoadingSkeleton,
-  SearchPagination,
-} from "./search-page.results";
-import { useSearchPageController } from "./search-page.controller";
+} from "./search-page.components";
+import { headers } from "next/headers";
+import { resolveAuthenticatedUserFromHeaders } from "@/lib/api-auth";
+import { favoriteService } from "@/services/favorite.service";
+import { searchService, type PropertySearchFilters } from "@/services/search.service";
+import {
+  buildPdfDownloadHref,
+  type FilterState,
+  PAGE_SIZE,
+  parseStateFromUrl,
+  type ViewerRole,
+} from "./search-page.shared";
+import { SearchPageClient } from "./search-page.client";
 
-export default function SearchPage() {
-  const {
-    filters,
-    currentPage,
-    currentPageSize,
-    properties,
-    meta,
-    isLoading,
-    errorMessage,
-    saveSearchFilterMessage,
-    priceRangeValidationMessage,
-    hasInvalidPriceRange,
-    isSavingSearchFilter,
-    favoritePropertyIds,
-    viewerRole,
-    pdfDownloadHref,
-    setFilterValue,
-    clearFilters,
-    setPageSize,
-    saveSearchFilter,
-    submitSearch,
-    toggleFavorite,
-    goToPreviousPage,
-    goToNextPage,
-  } = useSearchPageController();
+interface SearchPageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+const firstSearchParamValue = (value: string | string[] | undefined): string | undefined => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return undefined;
+};
+
+const toUrlSearchParams = (
+  rawSearchParams: { [key: string]: string | string[] | undefined },
+): URLSearchParams => {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(rawSearchParams)) {
+    const normalizedValue = firstSearchParamValue(value);
+
+    if (normalizedValue !== undefined) {
+      params.set(key, normalizedValue);
+    }
+  }
+
+  return params;
+};
+
+const toServiceFilters = (
+  filters: FilterState,
+  page: number,
+  pageSize: number,
+): PropertySearchFilters => {
+  const minPriceRaw = filters.minPrice.trim();
+  const maxPriceRaw = filters.maxPrice.trim();
+  const roomsRaw = filters.rooms.trim();
+  const minPrice = minPriceRaw.length > 0 ? Number(minPriceRaw) : Number.NaN;
+  const maxPrice = maxPriceRaw.length > 0 ? Number(maxPriceRaw) : Number.NaN;
+  const rooms = roomsRaw.length > 0 ? Number(roomsRaw) : Number.NaN;
+
+  return {
+    query: filters.query.trim() || undefined,
+    location: filters.location.trim() || undefined,
+    minPrice: Number.isFinite(minPrice) ? minPrice : undefined,
+    maxPrice: Number.isFinite(maxPrice) ? maxPrice : undefined,
+    rooms: Number.isFinite(rooms) ? rooms : undefined,
+    sort: filters.sort,
+    page,
+    pageSize,
+  };
+};
+
+const getAuthenticatedViewer = async (): Promise<{
+  userId: string | null;
+  role: ViewerRole;
+}> => {
+  const requestHeaders = await headers();
+  const authenticatedUser = resolveAuthenticatedUserFromHeaders(requestHeaders);
+
+  if (!authenticatedUser) {
+    return {
+      userId: null,
+      role: "EMPLOYEE",
+    };
+  }
+
+  return {
+    userId: authenticatedUser.userId,
+    role: authenticatedUser.role,
+  };
+};
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const params = toUrlSearchParams(resolvedSearchParams);
+  const queryString = params.toString();
+  const initialState = parseStateFromUrl(queryString.length > 0 ? `?${queryString}` : "");
+  const { userId, role } = await getAuthenticatedViewer();
+  const [results, favoriteItems] = await Promise.all([
+    searchService.searchProperties(
+      toServiceFilters(initialState.filters, initialState.page, initialState.pageSize),
+    ),
+    userId === null ? Promise.resolve([]) : favoriteService.listFavoritePropertyIdsForUser(userId),
+  ]);
+  const favoritePropertyIds = favoriteItems.map((favorite) => favorite.propertyId);
+  const currentPageSize = results.meta.pageSize === 6 || results.meta.pageSize === 24
+    ? results.meta.pageSize
+    : PAGE_SIZE;
 
   return (
-    <div className="space-y-6">
-      <SearchHero
-        query={filters.query}
-        isSearchDisabled={hasInvalidPriceRange}
-        onQueryChange={(value) => {
-          setFilterValue("query", value);
-        }}
-        onSubmit={submitSearch}
-      />
-
-      <section className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        <SearchFiltersPanel
-          filters={filters}
-          isSavingSearchFilter={isSavingSearchFilter}
-          hasInvalidPriceRange={hasInvalidPriceRange}
-          priceRangeValidationMessage={priceRangeValidationMessage}
-          saveSearchFilterMessage={saveSearchFilterMessage}
-          onFilterChange={setFilterValue}
-          onClearFilters={clearFilters}
-          onSaveSearchFilter={saveSearchFilter}
+    <SearchPageClient
+      key={queryString || "default-search"}
+      initialFilters={initialState.filters}
+      currentPage={results.meta.page}
+      currentPageSize={currentPageSize}
+      meta={results.meta}
+      viewerRole={role}
+      pdfDownloadHref={buildPdfDownloadHref(initialState.filters)}
+    >
+      {results.data.length === 0 ? (
+        <SearchEmptyState />
+      ) : (
+        <PropertyGrid
+          properties={results.data}
+          favoritePropertyIds={favoritePropertyIds}
         />
-
-        <div className="space-y-4">
-          <SearchResultsToolbar
-            totalProperties={meta?.total ?? properties.length}
-            viewerRole={viewerRole}
-            pdfDownloadHref={pdfDownloadHref}
-            sort={filters.sort}
-            pageSize={currentPageSize}
-            isLoading={isLoading}
-            onSortChange={(value) => {
-              setFilterValue("sort", value);
-            }}
-            onPageSizeChange={(value) => {
-              setPageSize(value);
-            }}
-          />
-
-          {errorMessage ? (
-            <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {errorMessage}
-            </p>
-          ) : null}
-
-          {isLoading && properties.length === 0 ? <SearchLoadingSkeleton /> : null}
-
-          {!isLoading && properties.length === 0 && !errorMessage ? <SearchEmptyState /> : null}
-
-          {properties.length > 0 ? (
-            <PropertyGrid
-              properties={properties}
-              favoritePropertyIds={favoritePropertyIds}
-              onFavoriteToggle={toggleFavorite}
-            />
-          ) : null}
-
-          {meta && meta.totalPages > 1 ? (
-            <SearchPagination
-              meta={meta}
-              isLoading={isLoading}
-              currentPage={currentPage}
-              onPrevious={goToPreviousPage}
-              onNext={goToNextPage}
-            />
-          ) : null}
-        </div>
-      </section>
-    </div>
+      )}
+    </SearchPageClient>
   );
 }

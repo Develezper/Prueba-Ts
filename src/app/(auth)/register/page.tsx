@@ -1,8 +1,13 @@
 "use client";
 
+import {
+  buildAuthPageHref,
+  DEFAULT_POST_AUTH_REDIRECT_PATH,
+  sanitizePostAuthRedirect,
+} from "@/lib/auth-redirect";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useState } from "react";
 
 interface RegisterFormState {
   email: string;
@@ -50,8 +55,9 @@ const extractErrorMessage = async (
   return fallback;
 };
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [form, setForm] = useState<RegisterFormState>({
     email: "",
     password: "",
@@ -59,6 +65,9 @@ export default function RegisterPage() {
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const redirectPath =
+    sanitizePostAuthRedirect(searchParams.get("next")) ??
+    DEFAULT_POST_AUTH_REDIRECT_PATH;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -85,7 +94,7 @@ export default function RegisterPage() {
       });
 
       if (response.status === 200 || response.status === 201) {
-        router.push("/search");
+        router.replace(redirectPath);
         return;
       }
 
@@ -116,13 +125,13 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-100 via-amber-50/50 to-white px-4 py-12 text-zinc-900">
+    <div className="min-h-screen bg-linear-to-b from-zinc-100 via-amber-50/50 to-white px-4 py-12 text-zinc-900">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
-          <p className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">
+          <p className="mb-6 text-2xl font-extrabold uppercase leading-none tracking-[0.3em] text-amber-700 sm:text-3xl">
             RentVago
           </p>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900">
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">
             Crea tu cuenta
           </h1>
           <p className="mt-2 text-sm text-zinc-600">
@@ -228,7 +237,7 @@ export default function RegisterPage() {
           <p className="mt-6 text-center text-sm text-zinc-600">
             ¿Ya tienes cuenta?{" "}
             <Link
-              href="/login"
+              href={buildAuthPageHref("/login", redirectPath)}
               className="font-semibold text-amber-700 transition hover:text-amber-800"
             >
               Iniciar sesión
@@ -237,5 +246,13 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterPageContent />
+    </Suspense>
   );
 }

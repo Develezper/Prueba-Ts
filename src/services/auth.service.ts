@@ -2,6 +2,7 @@ import { Role as RoleEnum } from "@/generated/prisma/enums";
 import type { Role } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 import {
+  verifyAccessToken,
   signAccessToken,
   signRefreshToken,
   verifyRefreshToken,
@@ -54,6 +55,9 @@ export interface AuthUser {
   id: string;
   email: string;
   role: Role;
+}
+
+interface AuthTokenUser extends AuthUser {
   tokenVersion: number;
 }
 
@@ -67,12 +71,17 @@ export interface AuthResult {
   tokens: AuthTokens;
 }
 
-const mapToAuthUser = (user: {
+interface LogoutInput {
+  accessToken?: string;
+  refreshToken?: string;
+}
+
+const mapToAuthTokenUser = (user: {
   id: string;
   email: string;
   role: Role;
   tokenVersion: number;
-}): AuthUser => {
+}): AuthTokenUser => {
   return {
     id: user.id,
     email: user.email,
@@ -81,13 +90,22 @@ const mapToAuthUser = (user: {
   };
 };
 
-const issueTokens = async (user: AuthUser): Promise<AuthTokens> => {
+const toPublicAuthUser = (user: AuthTokenUser): AuthUser => {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+  };
+};
+
+const issueTokens = async (user: AuthTokenUser): Promise<AuthTokens> => {
   const tokenPayload = {
     userId: user.id,
     role: user.role,
     tokenVersion: user.tokenVersion,
   };
 
+  // Issue both tokens from the same snapshot to keep version claims consistent.
   const [accessToken, refreshToken] = await Promise.all([
     signAccessToken(tokenPayload),
     signRefreshToken(tokenPayload),
@@ -106,6 +124,31 @@ const invalidCredentialsError = (): AuthServiceError =>
 const invalidRefreshTokenError = (): AuthServiceError =>
   new AuthServiceError("INVALID_REFRESH_TOKEN", "Invalid refresh token.", 401);
 
+const resolveLogoutUserId = async ({
+  accessToken,
+  refreshToken,
+}: LogoutInput): Promise<string | null> => {
+  if (refreshToken && refreshToken.trim().length > 0) {
+    try {
+      const payload = await verifyRefreshToken(refreshToken);
+      return payload.sub;
+    } catch {
+      // Ignore invalid refresh tokens so logout can still fall back to access tokens.
+    }
+  }
+
+  if (accessToken && accessToken.trim().length > 0) {
+    try {
+      const payload = await verifyAccessToken(accessToken);
+      return payload.sub;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
 export const register = async (input: RegisterInput): Promise<AuthResult> => {
   const payload = registerSchema.parse(input);
   const passwordHash = await bcrypt.hash(payload.password, BCRYPT_SALT_ROUNDS);
@@ -120,10 +163,10 @@ export const register = async (input: RegisterInput): Promise<AuthResult> => {
       select: userAuthSelect,
     });
 
-    const authUser = mapToAuthUser(createdUser);
+    const authUser = mapToAuthTokenUser(createdUser);
     const tokens = await issueTokens(authUser);
 
-    return { user: authUser, tokens };
+    return { user: toPublicAuthUser(authUser), tokens };
   } catch (error: unknown) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -158,10 +201,10 @@ export const login = async (input: LoginInput): Promise<AuthResult> => {
     throw invalidCredentialsError();
   }
 
-  const authUser = mapToAuthUser(user);
+  const authUser = mapToAuthTokenUser(user);
   const tokens = await issueTokens(authUser);
 
-  return { user: authUser, tokens };
+  return { user: toPublicAuthUser(authUser), tokens };
 };
 
 export const refresh = async (refreshToken: string): Promise<AuthResult> => {
@@ -177,6 +220,7 @@ export const refresh = async (refreshToken: string): Promise<AuthResult> => {
     throw invalidRefreshTokenError();
   }
 
+  // Atomic rotation prevents replay of old refresh tokens across concurrent requests.
   const rotationResult = await prisma.user.updateMany({
     where: {
       id: verifiedPayload.sub,
@@ -202,14 +246,40 @@ export const refresh = async (refreshToken: string): Promise<AuthResult> => {
     throw invalidRefreshTokenError();
   }
 
-  const authUser = mapToAuthUser(rotatedUser);
+  const authUser = mapToAuthTokenUser(rotatedUser);
   const tokens = await issueTokens(authUser);
 
-  return { user: authUser, tokens };
+  return { user: toPublicAuthUser(authUser), tokens };
+};
+
+export const logout = async ({
+  accessToken,
+  refreshToken,
+}: LogoutInput): Promise<void> => {
+  const userId = await resolveLogoutUserId({
+    accessToken,
+    refreshToken,
+  });
+
+  if (!userId) {
+    return;
+  }
+
+  await prisma.user.updateMany({
+    where: {
+      id: userId,
+    },
+    data: {
+      tokenVersion: {
+        increment: 1,
+      },
+    },
+  });
 };
 
 export const authService = {
   register,
   login,
   refresh,
+  logout,
 };

@@ -69,6 +69,7 @@ const createSearchQuerySchema = (defaultPageSize: number) => {
         .default("relevance"),
     })
     .superRefine((data, context) => {
+      // Validate cross-field price boundaries after individual numeric coercion.
       if (
         data.minPrice !== undefined &&
         data.maxPrice !== undefined &&
@@ -89,6 +90,7 @@ export const parsePropertySearchQuery = (
     defaultPageSize: number;
   },
 ): ParsedPropertySearchQuery => {
+  // Build the schema at runtime so route-level defaults (like page size) stay configurable.
   const schema = createSearchQuerySchema(options.defaultPageSize);
 
   return schema.parse({

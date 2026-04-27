@@ -1,38 +1,10 @@
 import { authService, AuthServiceError } from "@/services/auth.service";
-import { jwtConfig } from "@/lib/jwt";
+import { setAuthCookies } from "@/lib/auth-cookies";
 import { loginSchema } from "@/lib/validators";
 import { ZodError } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
-const ACCESS_COOKIE_NAME = "access_token";
-const REFRESH_COOKIE_NAME = "refresh_token";
-
 export const runtime = "nodejs";
-
-const setAuthCookies = (
-  response: NextResponse,
-  tokens: { accessToken: string; refreshToken: string },
-): void => {
-  response.cookies.set({
-    name: ACCESS_COOKIE_NAME,
-    value: tokens.accessToken,
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/",
-    maxAge: jwtConfig.accessTokenMaxAgeSeconds,
-  });
-
-  response.cookies.set({
-    name: REFRESH_COOKIE_NAME,
-    value: tokens.refreshToken,
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/",
-    maxAge: jwtConfig.refreshTokenMaxAgeSeconds,
-  });
-};
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { FavoriteButton } from "@/components/ui/favorite-button";
-import { verifyAccessToken } from "@/lib/jwt";
+import { resolveAuthenticatedUserFromHeaders } from "@/lib/api-auth";
 import { favoriteService } from "@/services/favorite.service";
 import { propertyService } from "@/services/property.service";
 
@@ -17,22 +17,9 @@ const currencyFormat = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 });
 
-const ACCESS_COOKIE_NAME = "access_token";
-
 const getAuthenticatedUserId = async (): Promise<string | null> => {
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get(ACCESS_COOKIE_NAME)?.value;
-
-  if (!accessToken) {
-    return null;
-  }
-
-  try {
-    const payload = await verifyAccessToken(accessToken);
-    return payload.sub;
-  } catch {
-    return null;
-  }
+  const requestHeaders = await headers();
+  return resolveAuthenticatedUserFromHeaders(requestHeaders)?.userId ?? null;
 };
 
 export default async function PropertyDetailPage({

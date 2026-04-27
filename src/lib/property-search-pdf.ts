@@ -12,7 +12,7 @@ const PROPERTY_CARD_HEIGHT = 72;
 const PROPERTY_CARD_GAP = 10;
 
 interface SearchPdfInput {
-  userId: string;
+  userLabel: string;
   filters: ParsedPropertySearchQuery;
   results: PropertySearchResult;
   generatedAt?: Date;
@@ -72,7 +72,7 @@ const addBasePage = (
   pdf: PDFDocument,
   title: string,
   generatedAt: string,
-  userId: string,
+  userLabel: string,
   filterSummary: string,
   summaryLine: string,
   regularFont: PDFFont,
@@ -104,7 +104,7 @@ const addBasePage = (
     color: rgb(0.88, 0.95, 0.93),
   });
 
-  page.drawText(toPdfSafeText(`Usuario: ${userId}`), {
+  page.drawText(toPdfSafeText(`Usuario: ${userLabel}`), {
     x: PAGE_WIDTH - 210,
     y: PAGE_HEIGHT - 56,
     size: 10,
@@ -175,7 +175,7 @@ const drawPageFooter = (
 };
 
 export const buildPropertySearchPdf = async ({
-  userId,
+  userLabel,
   filters,
   results,
   generatedAt = new Date(),
@@ -193,7 +193,7 @@ export const buildPropertySearchPdf = async ({
       pdf,
       "RentVago | Reporte de busqueda",
       toLocalDateText(generatedAt),
-      userId,
+      userLabel,
       filterSummary,
       summaryLine,
       regularFont,

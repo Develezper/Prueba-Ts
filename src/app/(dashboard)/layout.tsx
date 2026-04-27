@@ -48,7 +48,7 @@ export default async function DashboardLayout({
             <p className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-800">
               Rol: {roleLabel}
             </p>
-            <form action="/login" method="get">
+            <form action="/api/auth/logout" method="post">
               <button
                 type="submit"
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"

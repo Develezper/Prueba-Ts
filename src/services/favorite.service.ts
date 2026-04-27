@@ -27,6 +27,10 @@ export interface UserFavoriteItem {
   property: Property;
 }
 
+export interface UserFavoritePropertyIdItem {
+  propertyId: string;
+}
+
 export const toggleFavorite = async (
   userId: string,
   propertyId: string,
@@ -104,6 +108,19 @@ export const getUserFavorites = async (
   });
 };
 
+export const listFavoritePropertyIdsForUser = async (
+  userId: string,
+): Promise<UserFavoritePropertyIdItem[]> => {
+  return prisma.favorite.findMany({
+    where: {
+      userId,
+    },
+    select: {
+      propertyId: true,
+    },
+  });
+};
+
 export const isPropertyFavorite = async (
   userId: string,
   propertyId: string,
@@ -126,5 +143,6 @@ export const isPropertyFavorite = async (
 export const favoriteService = {
   toggleFavorite,
   getUserFavorites,
+  listFavoritePropertyIdsForUser,
   isPropertyFavorite,
 };

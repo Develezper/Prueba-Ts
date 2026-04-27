@@ -8,6 +8,7 @@ import {
   parsePropertySearchQuery,
 } from "@/lib/property-search-query";
 import { buildPropertySearchPdf } from "@/lib/property-search-pdf";
+import { prisma } from "@/lib/prisma";
 import { searchService } from "@/services/search.service";
 import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
@@ -25,8 +26,17 @@ export async function GET(request: NextRequest): Promise<Response> {
     });
 
     const results = await searchService.searchProperties(filters);
+    const user = await prisma.user.findUnique({
+      where: {
+        id: authenticatedUser.userId,
+      },
+      select: {
+        email: true,
+      },
+    });
+
     const pdfBytes = await buildPropertySearchPdf({
-      userId: authenticatedUser.userId,
+      userLabel: user?.email ?? authenticatedUser.userId,
       filters,
       results,
     });

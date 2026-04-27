@@ -79,5 +79,6 @@ model Favorite {
 }
 
 // Full-Text Search (PostgreSQL):
-// El campo "search_vector" y su indice GIN se gestionan via SQL migration
-// para soportar columna GENERATED con normalizacion lower(unaccent(...)).
+// The "search_vector" column and its GIN index are managed via SQL migrations
+// to support a GENERATED column with lower(unaccent(...)) normalization.
+// Location substring search is also backed by a functional trigram index in SQL migrations.

@@ -1,8 +1,13 @@
 "use client";
 
+import {
+  buildAuthPageHref,
+  DEFAULT_POST_AUTH_REDIRECT_PATH,
+  sanitizePostAuthRedirect,
+} from "@/lib/auth-redirect";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useState } from "react";
 
 interface LoginFormState {
   email: string;
@@ -30,14 +35,18 @@ const extractErrorMessage = async (
   return fallback;
 };
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [form, setForm] = useState<LoginFormState>({
     email: "",
     password: "",
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const redirectPath =
+    sanitizePostAuthRedirect(searchParams.get("next")) ??
+    DEFAULT_POST_AUTH_REDIRECT_PATH;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -58,7 +67,7 @@ export default function LoginPage() {
       });
 
       if (response.status === 200) {
-        router.push("/search");
+        router.replace(redirectPath);
         return;
       }
 
@@ -89,13 +98,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-zinc-100 via-slate-50 to-white px-4 py-8 text-zinc-900 sm:py-12">
+    <div className="flex min-h-screen items-center justify-center bg-linear-to-b from-zinc-100 via-slate-50 to-white px-4 py-8 text-zinc-900 sm:py-12">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
-          <p className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
+          <p className="mb-6 text-2xl font-extrabold uppercase leading-none tracking-[0.3em] text-emerald-700 sm:text-3xl">
             RentVago
           </p>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900">
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">
             Bienvenido de nuevo
           </h1>
           <p className="mt-2 text-sm text-zinc-600">
@@ -175,7 +184,7 @@ export default function LoginPage() {
           <p className="mt-6 text-center text-sm text-zinc-600">
             ¿Aún no tienes cuenta?{" "}
             <Link
-              href="/register"
+              href={buildAuthPageHref("/register", redirectPath)}
               className="font-semibold text-emerald-700 transition hover:text-emerald-800"
             >
               Crear cuenta
@@ -184,5 +193,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

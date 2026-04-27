@@ -1,5 +1,4 @@
 import { Prisma } from "@/generated/prisma/client";
-import type { Property } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export interface PropertySearchFilters {
@@ -13,8 +12,18 @@ export interface PropertySearchFilters {
   pageSize: number;
 }
 
+export interface PropertySearchItem {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  price: number | string;
+  location: string;
+  rooms: number;
+}
+
 export interface PropertySearchResult {
-  data: Property[];
+  data: PropertySearchItem[];
   meta: {
     page: number;
     pageSize: number;
@@ -36,13 +45,13 @@ export const searchProperties = async (
   const normalizeSql = (value: Prisma.Sql): Prisma.Sql => Prisma.sql`
     unaccent(lower(${value}))
   `;
-  const textSearchQuery = hasQuery
+  const strictTextSearchQuery = hasQuery
     ? Prisma.sql`plainto_tsquery('spanish', ${normalizeSql(Prisma.sql`${query}`)})`
     : null;
 
-  if (textSearchQuery) {
+  if (strictTextSearchQuery) {
     conditions.push(
-      Prisma.sql`"search_vector" @@ ${textSearchQuery}`,
+      Prisma.sql`"search_vector" @@ ${strictTextSearchQuery}`,
     );
   }
 
@@ -82,15 +91,15 @@ export const searchProperties = async (
       return Prisma.sql`ORDER BY "createdAt" DESC`;
     }
 
-    if (textSearchQuery) {
-      return Prisma.sql`ORDER BY ts_rank("search_vector", ${textSearchQuery}) DESC, "createdAt" DESC`;
+    if (strictTextSearchQuery) {
+      return Prisma.sql`ORDER BY ts_rank("search_vector", ${strictTextSearchQuery}) DESC, "createdAt" DESC`;
     }
 
     return Prisma.sql`ORDER BY "createdAt" DESC`;
   })();
 
   const [properties, countResult] = await Promise.all([
-    prisma.$queryRaw<Property[]>`
+    prisma.$queryRaw<PropertySearchItem[]>`
       SELECT
         "id",
         "title",
@@ -98,10 +107,7 @@ export const searchProperties = async (
         "imageUrl",
         "price",
         "location",
-        "rooms",
-        "ownerId",
-        "createdAt",
-        "updatedAt"
+        "rooms"
       FROM "Property"
       ${whereClause}
       ${orderByClause}

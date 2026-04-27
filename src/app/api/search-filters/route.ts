@@ -118,7 +118,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       {
         data: saved,
       },
-      { status: 200 },
+      { status: 201 },
     );
   } catch (error: unknown) {
     if (error instanceof AuthorizationError) {
