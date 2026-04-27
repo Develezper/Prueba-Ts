@@ -77,7 +77,7 @@ const createSearchQuerySchema = (defaultPageSize: number) => {
         context.addIssue({
           code: "custom",
           path: ["minPrice"],
-          message: "minPrice cannot be greater than maxPrice.",
+          message: "El precio mínimo no puede ser mayor que el precio máximo.",
         });
       }
     });

@@ -1,34 +1,13 @@
-import { verifyAccessToken } from "@/lib/jwt";
+import {
+  authorizationErrorResponse,
+  AuthorizationError,
+  requireAuthenticatedUser,
+} from "@/lib/api-auth";
 import { searchFilterService } from "@/services/search-filter.service";
 import { NextRequest, NextResponse } from "next/server";
 import { z, ZodError } from "zod";
 
 export const runtime = "nodejs";
-
-const ACCESS_COOKIE_NAME = "access_token";
-
-interface AuthenticatedRequestUser {
-  userId: string;
-}
-
-const resolveAuthenticatedUser = async (
-  request: NextRequest,
-): Promise<AuthenticatedRequestUser | null> => {
-  const accessToken = request.cookies.get(ACCESS_COOKIE_NAME)?.value;
-
-  if (accessToken) {
-    try {
-      const payload = await verifyAccessToken(accessToken);
-      return {
-        userId: payload.sub,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-};
 
 const asOptionalString = (value: unknown): unknown => {
   if (value === undefined || value === null) {
@@ -93,23 +72,14 @@ const saveSearchFilterSchema = z
       context.addIssue({
         code: "custom",
         path: ["minPrice"],
-        message: "minPrice cannot be greater than maxPrice.",
+        message: "El precio mínimo no puede ser mayor que el precio máximo.",
       });
     }
   });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const authenticatedUser = await resolveAuthenticatedUser(request);
-
-    if (!authenticatedUser) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 },
-      );
-    }
+    const authenticatedUser = await requireAuthenticatedUser(request);
 
     const filters = await searchFilterService.listForUser(authenticatedUser.userId);
 
@@ -119,10 +89,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       { status: 200 },
     );
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError) {
+      return authorizationErrorResponse(error);
+    }
+
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );
@@ -131,16 +105,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const authenticatedUser = await resolveAuthenticatedUser(request);
-
-    if (!authenticatedUser) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 },
-      );
-    }
+    const authenticatedUser = await requireAuthenticatedUser(request);
 
     const body: unknown = await request.json();
     const payload = saveSearchFilterSchema.parse(body);
@@ -156,10 +121,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 200 },
     );
   } catch (error: unknown) {
+    if (error instanceof AuthorizationError) {
+      return authorizationErrorResponse(error);
+    }
+
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         {
-          error: "Invalid JSON body.",
+          error: "El cuerpo JSON es inválido.",
         },
         { status: 400 },
       );
@@ -168,7 +137,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (error instanceof ZodError) {
       return NextResponse.json(
         {
-          error: "Validation error.",
+          error: "Error de validación.",
           issues: error.issues,
         },
         { status: 400 },
@@ -177,7 +146,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );

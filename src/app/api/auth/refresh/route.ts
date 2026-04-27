@@ -39,7 +39,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!refreshToken) {
       return NextResponse.json(
         {
-          error: "Missing refresh token.",
+          error: "Falta el token de refresco.",
         },
         { status: 401 },
       );
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (error.code === "INVALID_REFRESH_TOKEN") {
         return NextResponse.json(
           {
-            error: "Invalid refresh token.",
+            error: "El token de refresco es inválido.",
           },
           { status: 401 },
         );
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );

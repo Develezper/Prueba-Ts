@@ -33,16 +33,22 @@ export const searchProperties = async (
   const sort = filters.sort ?? "relevance";
   const skip = (filters.page - 1) * filters.pageSize;
   const conditions: Prisma.Sql[] = [];
+  const normalizeSql = (value: Prisma.Sql): Prisma.Sql => Prisma.sql`
+    unaccent(lower(${value}))
+  `;
+  const textSearchQuery = hasQuery
+    ? Prisma.sql`plainto_tsquery('spanish', ${normalizeSql(Prisma.sql`${query}`)})`
+    : null;
 
-  if (hasQuery) {
+  if (textSearchQuery) {
     conditions.push(
-      Prisma.sql`"search_vector" @@ plainto_tsquery('spanish', lower(unaccent(${query})))`,
+      Prisma.sql`"search_vector" @@ ${textSearchQuery}`,
     );
   }
 
   if (hasLocation) {
     conditions.push(
-      Prisma.sql`lower(unaccent("location")) LIKE '%' || lower(unaccent(${location})) || '%'`,
+      Prisma.sql`${normalizeSql(Prisma.sql`"location"`)} LIKE '%' || ${normalizeSql(Prisma.sql`${location}`)} || '%'`,
     );
   }
 
@@ -76,15 +82,8 @@ export const searchProperties = async (
       return Prisma.sql`ORDER BY "createdAt" DESC`;
     }
 
-    if (hasQuery) {
-      return Prisma.sql`
-        ORDER BY
-          ts_rank_cd(
-            "search_vector",
-            plainto_tsquery('spanish', lower(unaccent(${query})))
-          ) DESC,
-          "createdAt" DESC
-      `;
+    if (textSearchQuery) {
+      return Prisma.sql`ORDER BY ts_rank("search_vector", ${textSearchQuery}) DESC, "createdAt" DESC`;
     }
 
     return Prisma.sql`ORDER BY "createdAt" DESC`;

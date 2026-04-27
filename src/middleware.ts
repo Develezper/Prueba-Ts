@@ -1,10 +1,20 @@
 import { verifyAccessToken } from "@/lib/jwt";
+import type { Role } from "@/generated/prisma/enums";
 import { errors as joseErrors } from "jose";
 import { NextRequest, NextResponse } from "next/server";
 
 const ACCESS_COOKIE_NAME = "access_token";
 
 const protectedRoutePrefixes = ["/search", "/dashboard", "/favorites"];
+
+const routeRoleRules: Array<{
+  prefix: string;
+  allowedRoles: readonly Role[];
+}> = [
+  { prefix: "/search", allowedRoles: ["ADMIN", "EMPLOYEE"] },
+  { prefix: "/favorites", allowedRoles: ["ADMIN", "EMPLOYEE"] },
+  { prefix: "/dashboard", allowedRoles: ["ADMIN", "EMPLOYEE"] },
+];
 
 const isProtectedRoute = (pathname: string): boolean => {
   return protectedRoutePrefixes.some(
@@ -16,6 +26,11 @@ const redirectToLogin = (request: NextRequest): NextResponse => {
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("next", request.nextUrl.pathname);
   return NextResponse.redirect(loginUrl);
+};
+
+const redirectToRoleHome = (request: NextRequest, role: Role): NextResponse => {
+  const destination = role === "ADMIN" ? "/search" : "/search";
+  return NextResponse.redirect(new URL(destination, request.url));
 };
 
 const withAuthenticatedHeaders = (
@@ -44,6 +59,18 @@ const isJwtExpiredError = (error: unknown): boolean => {
   );
 };
 
+const canAccessPathByRole = (pathname: string, role: Role): boolean => {
+  const matchedRule = routeRoleRules.find(
+    (rule) => pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`),
+  );
+
+  if (!matchedRule) {
+    return true;
+  }
+
+  return matchedRule.allowedRoles.includes(role);
+};
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
 
@@ -59,6 +86,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   try {
     const payload = await verifyAccessToken(accessToken);
+
+    if (!canAccessPathByRole(pathname, payload.role)) {
+      return redirectToRoleHome(request, payload.role);
+    }
+
     return withAuthenticatedHeaders(request, payload.sub, payload.role);
   } catch (error: unknown) {
     if (isJwtExpiredError(error)) {

@@ -1,12 +1,13 @@
--- Enable accent-insensitive normalization for full-text search
-CREATE EXTENSION IF NOT EXISTS unaccent;
-
 -- Generated full-text search vector for property title + description
 ALTER TABLE "Property"
 ADD COLUMN IF NOT EXISTS "search_vector" tsvector GENERATED ALWAYS AS (
   to_tsvector(
     'spanish',
-    unaccent(coalesce("title", '') || ' ' || coalesce("description", ''))
+    translate(
+      lower(coalesce("title", '') || ' ' || coalesce("description", '')),
+      'áéíóúüñÁÉÍÓÚÜÑ',
+      'aeiouunaeiouun'
+    )
   )
 ) STORED;
 

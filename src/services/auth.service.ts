@@ -1,3 +1,4 @@
+import { Role as RoleEnum } from "@/generated/prisma/enums";
 import type { Role } from "@/generated/prisma/enums";
 import { Prisma } from "@/generated/prisma/client";
 import {
@@ -114,7 +115,7 @@ export const register = async (input: RegisterInput): Promise<AuthResult> => {
       data: {
         email: payload.email,
         passwordHash,
-        role: payload.role,
+        role: RoleEnum.EMPLOYEE,
       },
       select: userAuthSelect,
     });

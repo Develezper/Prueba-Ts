@@ -1,4 +1,8 @@
-import { verifyAccessToken } from "@/lib/jwt";
+import {
+  authorizationErrorResponse,
+  AuthorizationError,
+  requireAuthenticatedUser,
+} from "@/lib/api-auth";
 import {
   favoriteService,
   FavoriteServiceError,
@@ -8,49 +12,15 @@ import { z, ZodError } from "zod";
 
 export const runtime = "nodejs";
 
-const ACCESS_COOKIE_NAME = "access_token";
-
 const toggleFavoriteSchema = z
   .object({
     propertyId: z.string().uuid(),
   })
   .strict();
 
-interface AuthenticatedRequestUser {
-  userId: string;
-}
-
-const resolveAuthenticatedUser = async (
-  request: NextRequest,
-): Promise<AuthenticatedRequestUser | null> => {
-  const accessToken = request.cookies.get(ACCESS_COOKIE_NAME)?.value;
-
-  if (accessToken) {
-    try {
-      const payload = await verifyAccessToken(accessToken);
-      return {
-        userId: payload.sub,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-};
-
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const authenticatedUser = await resolveAuthenticatedUser(request);
-
-    if (!authenticatedUser) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 },
-      );
-    }
+    const authenticatedUser = await requireAuthenticatedUser(request);
 
     const favorites = await favoriteService.getUserFavorites(authenticatedUser.userId);
 
@@ -60,10 +30,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       { status: 200 },
     );
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError) {
+      return authorizationErrorResponse(error);
+    }
+
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );
@@ -72,16 +46,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const authenticatedUser = await resolveAuthenticatedUser(request);
-
-    if (!authenticatedUser) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 },
-      );
-    }
+    const authenticatedUser = await requireAuthenticatedUser(request);
 
     const body: unknown = await request.json();
     const payload = toggleFavoriteSchema.parse(body);
@@ -97,10 +62,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 200 },
     );
   } catch (error: unknown) {
+    if (error instanceof AuthorizationError) {
+      return authorizationErrorResponse(error);
+    }
+
     if (error instanceof SyntaxError || error instanceof ZodError) {
       return NextResponse.json(
         {
-          error: "Invalid request payload.",
+          error: "El cuerpo de la solicitud es inválido.",
         },
         { status: 400 },
       );
@@ -110,7 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (error.code === "PROPERTY_NOT_FOUND") {
         return NextResponse.json(
           {
-            error: "Property not found.",
+            error: "Propiedad no encontrada.",
           },
           { status: 404 },
         );
@@ -119,7 +88,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );

@@ -1,28 +1,27 @@
 import { z } from "zod";
 
-export const roleSchema = z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]);
+export const roleSchema = z.enum(["ADMIN", "EMPLOYEE"]);
 
 const emailSchema = z
   .string()
   .trim()
-  .min(1, "Email is required.")
-  .max(320, "Email is too long.")
-  .email("Email is invalid.")
+  .min(1, "El correo electrónico es obligatorio.")
+  .max(320, "El correo electrónico es demasiado largo.")
+  .email("El correo electrónico no es válido.")
   .transform((value) => value.toLowerCase());
 
 const passwordSchema = z
   .string()
-  .min(8, "Password must be at least 8 characters long.")
-  .max(72, "Password must not exceed 72 characters.")
-  .regex(/[a-z]/, "Password must include a lowercase letter.")
-  .regex(/[A-Z]/, "Password must include an uppercase letter.")
-  .regex(/\d/, "Password must include a number.");
+  .min(8, "La contraseña debe tener al menos 8 caracteres.")
+  .max(72, "La contraseña no debe superar los 72 caracteres.")
+  .regex(/[a-z]/, "La contraseña debe incluir una letra minúscula.")
+  .regex(/[A-Z]/, "La contraseña debe incluir una letra mayúscula.")
+  .regex(/\d/, "La contraseña debe incluir un número.");
 
 export const registerSchema = z
   .object({
     email: emailSchema,
     password: passwordSchema,
-    role: roleSchema.default("EMPLOYEE"),
   })
   .strict();
 
@@ -31,8 +30,8 @@ export const loginSchema = z
     email: emailSchema,
     password: z
       .string()
-      .min(1, "Password is required.")
-      .max(72, "Password must not exceed 72 characters."),
+      .min(1, "La contraseña es obligatoria.")
+      .max(72, "La contraseña no debe superar los 72 caracteres."),
   })
   .strict();
 

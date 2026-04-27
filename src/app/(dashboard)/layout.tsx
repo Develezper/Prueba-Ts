@@ -1,10 +1,20 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 
-export default function DashboardLayout({
+const roleLabelByValue: Record<string, string> = {
+  ADMIN: "Admin",
+  EMPLOYEE: "Empleado",
+};
+
+export default async function DashboardLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const requestHeaders = await headers();
+  const roleValue = requestHeaders.get("x-user-role") ?? "EMPLOYEE";
+  const roleLabel = roleLabelByValue[roleValue] ?? roleValue;
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -15,7 +25,7 @@ export default function DashboardLayout({
             </div>
             <div>
               <p className="text-base font-semibold tracking-tight">RentVago</p>
-              <p className="text-xs text-slate-500">Residential Management</p>
+              <p className="text-xs text-slate-500">Gestion residencial</p>
             </div>
           </div>
 
@@ -34,14 +44,19 @@ export default function DashboardLayout({
             </Link>
           </nav>
 
-          <form action="/login" method="get">
-            <button
-              type="submit"
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
-            >
-              Cerrar Sesion
-            </button>
-          </form>
+          <div className="flex items-center gap-3">
+            <p className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-800">
+              Rol: {roleLabel}
+            </p>
+            <form action="/login" method="get">
+              <button
+                type="submit"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
+              >
+                Cerrar sesión
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

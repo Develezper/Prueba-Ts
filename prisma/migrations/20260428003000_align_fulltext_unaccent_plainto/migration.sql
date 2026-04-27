@@ -1,4 +1,4 @@
--- Keep unaccent enabled and wrap it in an immutable helper for generated columns.
+-- Align full-text normalization with lower(unaccent(...)) for existing databases.
 
 CREATE EXTENSION IF NOT EXISTS unaccent;
 

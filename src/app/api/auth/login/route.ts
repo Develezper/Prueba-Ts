@@ -53,7 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         {
-          error: "Invalid JSON body.",
+          error: "El cuerpo JSON es inválido.",
         },
         { status: 400 },
       );
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (error instanceof ZodError) {
       return NextResponse.json(
         {
-          error: "Validation error.",
+          error: "Error de validación.",
           issues: error.issues,
         },
         { status: 400 },
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (error.code === "INVALID_CREDENTIALS") {
         return NextResponse.json(
           {
-            error: "Invalid credentials.",
+            error: "Credenciales inválidas.",
           },
           { status: 401 },
         );
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );

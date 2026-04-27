@@ -16,6 +16,7 @@ const extractErrorMessage = async (
 ): Promise<string> => {
   try {
     const data: unknown = await response.json();
+
     if (
       typeof data === "object" &&
       data !== null &&
@@ -23,6 +24,24 @@ const extractErrorMessage = async (
       typeof data.error === "string"
     ) {
       return data.error;
+    }
+
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "issues" in data &&
+      Array.isArray(data.issues)
+    ) {
+      const firstIssue = data.issues[0];
+
+      if (
+        typeof firstIssue === "object" &&
+        firstIssue !== null &&
+        "message" in firstIssue &&
+        typeof firstIssue.message === "string"
+      ) {
+        return firstIssue.message;
+      }
     }
   } catch {
     return fallback;

@@ -136,11 +136,6 @@ const usersSeedData = [
     role: Role.ADMIN,
   },
   {
-    email: "seed.manager@rentvago.com",
-    password: "RentVagoManager123",
-    role: Role.MANAGER,
-  },
-  {
     email: "seed.analyst@rentvago.com",
     password: "RentVagoUser123",
     role: Role.EMPLOYEE,

@@ -1,40 +1,19 @@
-import { verifyAccessToken } from "@/lib/jwt";
+import {
+  authorizationErrorResponse,
+  AuthorizationError,
+  requireAuthenticatedUser,
+} from "@/lib/api-auth";
 import { searchFilterService } from "@/services/search-filter.service";
 import { NextRequest, NextResponse } from "next/server";
 import { z, ZodError } from "zod";
 
 export const runtime = "nodejs";
 
-const ACCESS_COOKIE_NAME = "access_token";
-
-interface AuthenticatedRequestUser {
-  userId: string;
-}
-
 interface RouteContext {
   params: Promise<{
     id: string;
   }>;
 }
-
-const resolveAuthenticatedUser = async (
-  request: NextRequest,
-): Promise<AuthenticatedRequestUser | null> => {
-  const accessToken = request.cookies.get(ACCESS_COOKIE_NAME)?.value;
-
-  if (accessToken) {
-    try {
-      const payload = await verifyAccessToken(accessToken);
-      return {
-        userId: payload.sub,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-};
 
 const asOptionalString = (value: unknown): unknown => {
   if (value === undefined || value === null) {
@@ -101,7 +80,7 @@ const updateSearchFilterSchema = z
       context.addIssue({
         code: "custom",
         path: ["minPrice"],
-        message: "minPrice cannot be greater than maxPrice.",
+        message: "El precio mínimo no puede ser mayor que el precio máximo.",
       });
     }
   });
@@ -116,16 +95,7 @@ export async function GET(
   context: RouteContext,
 ): Promise<NextResponse> {
   try {
-    const authenticatedUser = await resolveAuthenticatedUser(request);
-
-    if (!authenticatedUser) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 },
-      );
-    }
+    const authenticatedUser = await requireAuthenticatedUser(request);
 
     const id = await resolveId(context);
     const filter = await searchFilterService.getByIdForUser(
@@ -136,7 +106,7 @@ export async function GET(
     if (!filter) {
       return NextResponse.json(
         {
-          error: "Search filter not found.",
+          error: "Filtro de búsqueda no encontrado.",
         },
         { status: 404 },
       );
@@ -149,10 +119,14 @@ export async function GET(
       { status: 200 },
     );
   } catch (error: unknown) {
+    if (error instanceof AuthorizationError) {
+      return authorizationErrorResponse(error);
+    }
+
     if (error instanceof ZodError) {
       return NextResponse.json(
         {
-          error: "Invalid search filter id.",
+          error: "El id del filtro de búsqueda es inválido.",
           issues: error.issues,
         },
         { status: 400 },
@@ -161,7 +135,7 @@ export async function GET(
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );
@@ -173,16 +147,7 @@ export async function PATCH(
   context: RouteContext,
 ): Promise<NextResponse> {
   try {
-    const authenticatedUser = await resolveAuthenticatedUser(request);
-
-    if (!authenticatedUser) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 },
-      );
-    }
+    const authenticatedUser = await requireAuthenticatedUser(request);
 
     const id = await resolveId(context);
     const body: unknown = await request.json();
@@ -196,7 +161,7 @@ export async function PATCH(
     if (!updated) {
       return NextResponse.json(
         {
-          error: "Search filter not found.",
+          error: "Filtro de búsqueda no encontrado.",
         },
         { status: 404 },
       );
@@ -209,10 +174,14 @@ export async function PATCH(
       { status: 200 },
     );
   } catch (error: unknown) {
+    if (error instanceof AuthorizationError) {
+      return authorizationErrorResponse(error);
+    }
+
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         {
-          error: "Invalid JSON body.",
+          error: "El cuerpo JSON es inválido.",
         },
         { status: 400 },
       );
@@ -221,7 +190,7 @@ export async function PATCH(
     if (error instanceof ZodError) {
       return NextResponse.json(
         {
-          error: "Validation error.",
+          error: "Error de validación.",
           issues: error.issues,
         },
         { status: 400 },
@@ -230,7 +199,7 @@ export async function PATCH(
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );
@@ -249,16 +218,7 @@ export async function DELETE(
   context: RouteContext,
 ): Promise<NextResponse> {
   try {
-    const authenticatedUser = await resolveAuthenticatedUser(request);
-
-    if (!authenticatedUser) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 },
-      );
-    }
+    const authenticatedUser = await requireAuthenticatedUser(request);
 
     const id = await resolveId(context);
     const deleted = await searchFilterService.deleteByIdForUser(
@@ -269,7 +229,7 @@ export async function DELETE(
     if (!deleted) {
       return NextResponse.json(
         {
-          error: "Search filter not found.",
+          error: "Filtro de búsqueda no encontrado.",
         },
         { status: 404 },
       );
@@ -277,10 +237,14 @@ export async function DELETE(
 
     return NextResponse.json(null, { status: 204 });
   } catch (error: unknown) {
+    if (error instanceof AuthorizationError) {
+      return authorizationErrorResponse(error);
+    }
+
     if (error instanceof ZodError) {
       return NextResponse.json(
         {
-          error: "Invalid search filter id.",
+          error: "El id del filtro de búsqueda es inválido.",
           issues: error.issues,
         },
         { status: 400 },
@@ -289,7 +253,7 @@ export async function DELETE(
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );

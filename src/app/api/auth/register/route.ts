@@ -53,16 +53,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         {
-          error: "Invalid JSON body.",
+          error: "El cuerpo JSON es inválido.",
         },
         { status: 400 },
       );
     }
 
     if (error instanceof ZodError) {
+      const firstIssueMessage = error.issues[0]?.message;
+
       return NextResponse.json(
         {
-          error: "Validation error.",
+          error: firstIssueMessage ?? "Error de validación.",
           issues: error.issues,
         },
         { status: 400 },
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (error.code === "EMAIL_ALREADY_IN_USE") {
         return NextResponse.json(
           {
-            error: "A user with this email already exists.",
+            error: "Ya existe un usuario con este correo electrónico.",
           },
           { status: 400 },
         );
@@ -82,7 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (error.code === "INVALID_CREDENTIALS") {
         return NextResponse.json(
           {
-            error: "Invalid credentials.",
+            error: "Credenciales inválidas.",
           },
           { status: 401 },
         );
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error: "Error interno del servidor.",
       },
       { status: 500 },
     );
